@@ -1,0 +1,43 @@
+branches:
+  only:
+  - master
+
+configuration:
+  - Release
+  - Debug
+
+clone_folder: c:\projects\winafl
+
+environment:
+  DynamoRIO_DIR: c:\projects\winafl\build\DynamoRIO-Windows-6.2.0-2\cmake
+
+  matrix:
+    - platform: Win32
+    - platform: x64
+
+before_build:
+  - cmd: cd c:\projects\winafl
+  - cmd: mkdir build
+  - cmd: cd build
+  - cmd: echo Downloading Dynamorio...
+  - cmd: curl -fsSL -o DynamoRIO-Windows-6.2.0-2.zip 'https://github.com/DynamoRIO/dynamorio/releases/download/release_6_2_0/DynamoRIO-Windows-6.2.0-2.zip'
+  - cmd: 7z x DynamoRIO-Windows-6.2.0-2.zip
+  - cmd: echo Running cmake...
+  - cmd: if "%platform%"=="Win32" cmake .. -G "Visual Studio 10"
+  - cmd: if "%platform%"=="x64" cmake .. -G "Visual Studio 10 Win64"
+  - cmd: chdir
+
+build:
+  project: c:\projects\winafl\build\winafl.sln
+
+after_build:
+  - cmd: cd %configuration%
+  - cmd: if "%platform%"=="Win32" if "%configuration%"=="Release" 7z a -t7z ..\..\winafl.x86.release.7z *
+  - cmd: if "%platform%"=="Win32" if "%configuration%"=="Debug" 7z a -t7z ..\..\winafl.x86.debug.7z *
+  - cmd: if "%platform%"=="x64" if "%configuration%"=="Release" 7z a -t7z ..\..\winafl.x64.release.7z *
+  - cmd: if "%platform%"=="x64" if "%configuration%"=="Debug" 7z a -t7z ..\..\winafl.x64.debug.7z *
+  - cmd: chdir
+
+artifacts:
+  - path: winafl.*.7z
+
