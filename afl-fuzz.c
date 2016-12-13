@@ -134,6 +134,8 @@ static HANDLE pipe_handle;            /* Handle of the name pipe          */
 static u64    name_seed;              /* Random integer to have a unique shm/pipe name */
 static HANDLE devnul_handle;          /* Handle of the nul device         */
 static u8     sinkhole_stds = 1;      /* Sink-hole stdout/stderr messages?*/
+static char   *fuzzer_id = NULL;      /* The fuzzer ID or a randomized 
+                                         seed allowing multiple instances */
 
 static volatile u8 stop_soon,         /* Ctrl-C pressed?                  */
                    clear_screen = 1,  /* Window resized?                  */
@@ -1228,6 +1230,7 @@ static void setup_shm(void) {
 
   char* shm_str;
   unsigned int seeds[2];
+  u64 name_seed;
   u8 attempts = 0;
 
   if (!in_bitmap) memset(virgin_bits, 255, MAP_SIZE);
@@ -1236,14 +1239,15 @@ static void setup_shm(void) {
   memset(virgin_crash, 255, MAP_SIZE);
 
   while(attempts < 5) {
-    if(sync_id) {
-      shm_str = (char *)alloc_printf("afl_shm_%s", sync_id);
-    } else {
+    if(fuzzer_id == NULL) {
+      // If it is null, it means we have to generate a random seed to name the instance
       rand_s(&seeds[0]);
       rand_s(&seeds[1]);
       name_seed = ((u64)seeds[0] << 32) | seeds[1];
-      shm_str = (char *)alloc_printf("afl_shm_%I64x", name_seed);
+      fuzzer_id = (char *)alloc_printf("%I64x", name_seed);
     }
+
+    shm_str = (char *)alloc_printf("afl_shm_%s", fuzzer_id);
 
     shm_handle = CreateFileMapping(
                    INVALID_HANDLE_VALUE,    // use paging file
@@ -1262,6 +1266,8 @@ static void setup_shm(void) {
         // We need another attempt to find a unique section name
         attempts++;
         ck_free(shm_str);
+        ck_free(fuzzer_id);
+        fuzzer_id = NULL;
         continue;
       }
       else {
@@ -2029,11 +2035,7 @@ static void create_target_process(char** argv) {
   STARTUPINFO si;
   PROCESS_INFORMATION pi;
 
-  if(sync_id) {
-    pipe_name = (char *)alloc_printf("\\\\.\\pipe\\afl_pipe_%s", sync_id);
-  } else {
-    pipe_name = (char *)alloc_printf("\\\\.\\pipe\\afl_pipe_%I64x", name_seed);
-  }
+  pipe_name = (char *)alloc_printf("\\\\.\\pipe\\afl_pipe_%s", fuzzer_id);
 
   pipe_handle = CreateNamedPipe(
     pipe_name,                // pipe name
@@ -2052,19 +2054,11 @@ static void create_target_process(char** argv) {
 
   target_cmd = argv_to_cmd(argv);
 
-  if(sync_id) {
-    pidfile = alloc_printf("childpid_%s.txt", sync_id);
-    dr_cmd = alloc_printf(
-      "%s\\drrun.exe -pidfile %s -no_follow_children -c winafl.dll %s -fuzzer_id %s -- %s",
-      dynamorio_dir, pidfile, client_params, sync_id, target_cmd
-    );
-  } else {
-    pidfile = alloc_printf("childpid_%I64x.txt", name_seed);
-    dr_cmd = alloc_printf(
-      "%s\\drrun.exe -pidfile %s -no_follow_children -c winafl.dll %s -fuzzer_id %I64x -- %s",
-      dynamorio_dir, pidfile, client_params, name_seed, target_cmd
-    );
-  }
+  pidfile = alloc_printf("childpid_%s.txt", fuzzer_id);
+  dr_cmd = alloc_printf(
+    "%s\\drrun.exe -pidfile %s -no_follow_children -c winafl.dll %s -fuzzer_id %s -- %s",
+    dynamorio_dir, pidfile, client_params, fuzzer_id, target_cmd
+  );
 
   ZeroMemory( &si, sizeof(si) );
   si.cb = sizeof(si);
@@ -7194,6 +7188,7 @@ int main(int argc, char** argv) {
 
         if (sync_id) FATAL("Multiple -S or -M options not supported");
         sync_id = optarg;
+        fuzzer_id = sync_id;
         break;
 
       case 'f': /* target file */
@@ -7491,6 +7486,9 @@ stop_fuzzing:
   destroy_queue();
   destroy_extras();
   ck_free(target_path);
+
+  if(fuzzer_id != NULL && fuzzer_id != sync_id)
+    ck_free(fuzzer_id);
 
   alloc_report();
 
