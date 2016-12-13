@@ -4629,8 +4629,9 @@ static u8 fuzz_one(char** argv) {
 
 #endif /* ^IGNORE_FINDS */
 
-  if (not_on_tty)
-    ACTF("Fuzzing test case #%u (%u total)...", current_entry, queued_paths);
+  // This makes the Windows console flickers
+  // if (not_on_tty)
+  //   ACTF("Fuzzing test case #%u (%u total)...", current_entry, queued_paths);
 
   /* Map the test case into memory. */
 
@@ -7395,10 +7396,11 @@ int main(int argc, char** argv) {
 
       show_stats();
 
-      if (not_on_tty) {
-        ACTF("Entering queue cycle %llu.", queue_cycle);
-        fflush(stdout);
-      }
+      // This makes the Windows console flickers
+      // if (not_on_tty) {
+      //   ACTF("Entering queue cycle %llu.", queue_cycle);
+      //   fflush(stdout);
+      // }
 
       /* If we had a full queue cycle with no new finds, try
          recombination strategies next. */
