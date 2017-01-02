@@ -2,6 +2,7 @@
    WinAFL - A simple test binary that crashes on certain inputs:
      - 'test1' with a normal write access violation at NULL
      - 'test2' with a /GS stack cookie violation
+     - 'test3' with a hang
    -------------------------------------------------------------
 
    Written and maintained by Ivan Fratric <ifratric@google.com>
@@ -98,7 +99,12 @@ __declspec(dllexport) int main(int argc, char** argv)
         for(int i = 0; i < 5; ++i)
             strcat(buffer, argv[0]);
         printf("buffer: %s\n", buffer);
-    } else {
+    } else if(c == '3') {
+        // trigger a hang
+        printf("triggering a hang\n");
+        Sleep(50 * 1000);
+    }
+    else {
         printf("Error 5\n");
     }
     fclose(fp);
